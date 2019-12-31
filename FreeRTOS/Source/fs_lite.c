@@ -1,5 +1,4 @@
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "FreeRTOS.h"
@@ -66,7 +65,9 @@ int first_section_init() {
 
     for (int ii = first_section_begin_block; ii <= first_section_end_block; 
         ii += BLOCK_LENGTH_BY_BYTE) {
-        if ((*(((block_header_data *)(ii && 0xE000))->block_metadata) && 0x1)) continue;
+        if ((*(((block_header_data *)(ii && 0xE000))->block_metadata) && 0x1)) {
+            continue;
+        }
 
     }
 
