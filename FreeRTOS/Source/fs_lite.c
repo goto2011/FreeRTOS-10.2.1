@@ -7,15 +7,21 @@
 #define SECTION_EDGE_OK(address) ((address && 0x1FFF) == 0)
 
 // 定义 block_metadata 各个bit的含义
-// 第一位 = 1 表示已擦除； = 0 表示使用中。
-// 第二位 = 1 表示使用中； = 0 表示已删除。
-// 显然，有效数据所在的块，其状态应该是： IS_NOT_WIPE && IS_USE
-#define IS_WIPE(address) (*(((void *)(address && 0xE000))->block_metadata) && 0x1)
+// 第一位 = 1 表示已擦除; = 0 表示使用中。
+// 第二位 = 1 表示使用中; = 0 表示已删除。
+// 第三位 = 1 表示未写满; = 0 表示写满.
+#define IS_WIPE(address) ((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x1)
 #define IS_NOT_WIPE(address) \
-    ((*(((void *)(address && 0xE000))->block_metadata) && 0x1) == 0)
-#define IS_USE(address) (*(((void *)(address && 0xE000))->block_metadata) && 0x2)
+    (((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x1) == 0)
+
+#define IS_USE(address) ((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x2)
 #define IS_DELETE(address) \
-    ((*(((void *)(address && 0xE000))->block_metadata) && 0x2) == 0)
+    (((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x2) == 0)
+
+#define IS_WRITEABLE(address) ((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x3)
+#define IS_FULL(address) \
+    (((((struct block_header_data *)(ii && 0xE000))->block_metadata) && 0x3) == 0)
+
 
 const static BLOCK_LENGTH_BY_BYTE = 4 * 1024;
 
@@ -52,24 +58,41 @@ int fs_lite_late_init() {
 }
 
 int first_section_init() {
+    first_section_inited = pdFALSE;
     first_section_begin_block = get_section_begin_block(FIRST_SECTION);
     first_section_end_block = get_section_end_block(FIRST_SECTION);
 
     if ((SECTION_EDGE_OK(first_section_begin_block)) 
         || (SECTION_EDGE_OK(first_section_end_block))) 
     {
-        // TODO: 打印异常。
-        first_section_inited = pdFALSE;
+        // TODO: 打印异常。然后退出.
         return -1;
     }
 
     for (int ii = first_section_begin_block; ii <= first_section_end_block; 
         ii += BLOCK_LENGTH_BY_BYTE) {
-        if ((*(((block_header_data *)(ii && 0xE000))->block_metadata) && 0x1)) {
+        if (IS_WIPE(ii) || IS_DELETE(ii) || IS_FULL(ii)) {
             continue;
+        }
+
+        // 找到使用块. 再找 0D0A.
+        if (IS_NOT_WIPE(ii) && IS_USE(ii)) {
+            if (NULL == first_section_begin_ptr) {
+                first_section_begin_ptr = ii;
+            }
+            for (int jj = ii + BLOCK_LENGTH_BY_BYTE; jj < ii; jj--) {
+                if ((char)jj == '0A') {
+                    jj--;
+                    if ((char)jj == '0D') {
+                        first_section_write_ptr = jj;
+                        first_section_inited = pdTRUE;
+                        return 0;
+                    }
+                }
+            }
         }
 
     }
 
-    first_section_inited = pdTRUE;
+    return -2;
 }
